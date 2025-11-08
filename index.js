@@ -1,22 +1,33 @@
-// ==========================
-// 🌐 SMILE ZONE BACKEND
-// ==========================
+// server/index.js
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
+const multer = require("multer");
 
 const app = express();
 
-// --- Middlewares ---
+// Middlewares
 app.use(cors({ origin: "*" }));
-app.use(express.json({ limit: "10mb" })); // Soporta imágenes en base64
+app.use(express.json({ limit: "20mb" })); // soporte base64 grande
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// --- Archivo donde se guardan los productos ---
+// Multer for direct file uploads (FormData)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, "uploads");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname));
+  },
+});
+const upload = multer({ storage });
+
 const productsFile = path.join(__dirname, "products.json");
 
-// === FUNCIONES AUXILIARES ===
 function loadProducts() {
   try {
     const data = fs.readFileSync(productsFile, "utf8");
@@ -30,84 +41,63 @@ function saveProducts(products) {
   fs.writeFileSync(productsFile, JSON.stringify(products, null, 2));
 }
 
-// === RUTAS ===
+// Routes
 
-// ✅ Obtener todos los productos
+app.get("/", (req, res) => {
+  res.send("🚀 Smile Zone Backend funcionando correctamente");
+});
+
 app.get("/products", (req, res) => {
   const products = loadProducts();
   res.json(products);
 });
 
-// ✅ Agregar nuevo producto
+// Upload endpoint (FormData file). Returns URL.
+app.post("/upload", upload.single("image"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file" });
+  const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+  res.json({ url: imageUrl });
+});
+
+// Add product (image can be URL or base64 string)
 app.post("/add-product", (req, res) => {
   const { name, price, image, category, description } = req.body;
-
-  if (!name || !price) {
-    return res.status(400).json({ error: "Faltan campos obligatorios (nombre o precio)" });
-  }
+  if (!name || !price) return res.status(400).json({ error: "Faltan campos obligatorios" });
 
   const products = loadProducts();
-
-  const newProduct = {
-    id: Date.now(),
-    name,
-    price,
-    image, // Puede ser URL o base64
-    category,
-    description,
-  };
-
+  const newProduct = { id: Date.now(), name, price, image: image || "", category: category || "", description: description || "" };
   products.push(newProduct);
   saveProducts(products);
-
-  res.json({ message: "✅ Producto agregado correctamente", product: newProduct });
+  res.json({ message: "✅ Producto agregado", product: newProduct });
 });
 
-// ✅ Actualizar producto existente
+// Update product
 app.post("/update-product", (req, res) => {
   const { id, name, price, image, category, description } = req.body;
-
-  if (!id) {
-    return res.status(400).json({ error: "Falta el ID del producto a actualizar" });
-  }
+  if (!id) return res.status(400).json({ error: "Falta id" });
 
   let products = loadProducts();
-  const index = products.findIndex((p) => p.id === id);
+  const idx = products.findIndex(p => p.id === id);
+  if (idx === -1) return res.status(404).json({ error: "Producto no encontrado" });
 
-  if (index === -1) {
-    return res.status(404).json({ error: "Producto no encontrado" });
-  }
-
-  products[index] = { id, name, price, image, category, description };
+  products[idx] = { id, name, price, image: image || products[idx].image, category, description };
   saveProducts(products);
-
-  res.json({ message: "🛠️ Producto actualizado correctamente", product: products[index] });
+  res.json({ message: "🛠️ Producto actualizado", product: products[idx] });
 });
 
-// ✅ Eliminar producto
+// Delete product
 app.post("/delete-product", (req, res) => {
   const { id } = req.body;
+  if (!id) return res.status(400).json({ error: "Falta id" });
 
-  if (!id) {
-    return res.status(400).json({ error: "Falta el ID del producto a eliminar" });
-  }
-
-  const products = loadProducts();
-  const filtered = products.filter((p) => p.id !== id);
-
-  if (filtered.length === products.length) {
-    return res.status(404).json({ error: "Producto no encontrado" });
-  }
+  let products = loadProducts();
+  const filtered = products.filter(p => p.id !== id);
+  if (filtered.length === products.length) return res.status(404).json({ error: "Producto no encontrado" });
 
   saveProducts(filtered);
-  res.json({ message: "🗑️ Producto eliminado correctamente" });
+  res.json({ message: "🗑️ Producto eliminado" });
 });
 
-// ✅ Ruta de prueba base
-app.get("/", (req, res) => {
-  res.send("🚀 Smile Zone Backend funcionando correctamente");
-});
-
-// === INICIAR SERVIDOR ===
+// Start
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Servidor activo en puerto ${PORT}`));
