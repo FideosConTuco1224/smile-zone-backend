@@ -1,33 +1,37 @@
-// server/index.js
-require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
-const fs = require("fs");
-const path = require("path");
-const multer = require("multer");
+// ==========================
+// 🌐 SMILE ZONE BACKEND (versión final)
+// ==========================
+import express from "express";
+import cors from "cors";
+import fs from "fs";
+import path from "path";
+import multer from "multer";
 
 const app = express();
+const PORT = process.env.PORT || 3001;
 
-// Middlewares
+// --- Middlewares ---
 app.use(cors({ origin: "*" }));
-app.use(express.json({ limit: "20mb" })); // soporte base64 grande
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use(express.json({ limit: "10mb" }));
 
-// Multer for direct file uploads (FormData)
+// --- Carpeta para subir imágenes ---
+const uploadDir = "./uploads";
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
+
+// --- Configuración de multer para subir imágenes ---
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(__dirname, "uploads");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-    cb(null, dir);
-  },
+  destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}${ext}`);
   },
 });
 const upload = multer({ storage });
 
-const productsFile = path.join(__dirname, "products.json");
+// --- Archivo donde se guardan los productos ---
+const productsFile = path.join("./products.json");
 
+// === FUNCIONES AUXILIARES ===
 function loadProducts() {
   try {
     const data = fs.readFileSync(productsFile, "utf8");
@@ -41,63 +45,73 @@ function saveProducts(products) {
   fs.writeFileSync(productsFile, JSON.stringify(products, null, 2));
 }
 
-// Routes
+// === RUTAS ===
 
-app.get("/", (req, res) => {
-  res.send("🚀 Smile Zone Backend funcionando correctamente");
-});
-
+// 🟢 Obtener todos los productos
 app.get("/products", (req, res) => {
   const products = loadProducts();
   res.json(products);
 });
 
-// Upload endpoint (FormData file). Returns URL.
-app.post("/upload", upload.single("image"), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file" });
-  const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-  res.json({ url: imageUrl });
-});
+// 🟢 Agregar un nuevo producto con imagen subida
+app.post("/add-product", upload.single("image"), (req, res) => {
+  const { name, price, category, description } = req.body;
+  const imageUrl = req.file
+    ? `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`
+    : "";
 
-// Add product (image can be URL or base64 string)
-app.post("/add-product", (req, res) => {
-  const { name, price, image, category, description } = req.body;
-  if (!name || !price) return res.status(400).json({ error: "Faltan campos obligatorios" });
+  if (!name || !price) {
+    return res.status(400).json({ error: "Faltan campos obligatorios (nombre o precio)" });
+  }
 
   const products = loadProducts();
-  const newProduct = { id: Date.now(), name, price, image: image || "", category: category || "", description: description || "" };
+  const newProduct = {
+    id: Date.now(),
+    name,
+    price,
+    category,
+    description,
+    image: imageUrl,
+  };
+
   products.push(newProduct);
   saveProducts(products);
-  res.json({ message: "✅ Producto agregado", product: newProduct });
+  res.json({ message: "✅ Producto agregado correctamente", product: newProduct });
 });
 
-// Update product
-app.post("/update-product", (req, res) => {
-  const { id, name, price, image, category, description } = req.body;
-  if (!id) return res.status(400).json({ error: "Falta id" });
-
+// 🛠️ Modificar producto existente
+app.put("/edit-product/:id", (req, res) => {
+  const { id } = req.params;
+  const updated = req.body;
   let products = loadProducts();
-  const idx = products.findIndex(p => p.id === id);
-  if (idx === -1) return res.status(404).json({ error: "Producto no encontrado" });
 
-  products[idx] = { id, name, price, image: image || products[idx].image, category, description };
+  const index = products.findIndex((p) => p.id === parseInt(id));
+  if (index === -1) return res.status(404).json({ error: "Producto no encontrado" });
+
+  products[index] = { ...products[index], ...updated };
   saveProducts(products);
-  res.json({ message: "🛠️ Producto actualizado", product: products[idx] });
+
+  res.json({ message: "🛠️ Producto actualizado correctamente", product: products[index] });
 });
 
-// Delete product
-app.post("/delete-product", (req, res) => {
-  const { id } = req.body;
-  if (!id) return res.status(400).json({ error: "Falta id" });
-
+// 🗑️ Eliminar producto
+app.delete("/delete-product/:id", (req, res) => {
+  const { id } = req.params;
   let products = loadProducts();
-  const filtered = products.filter(p => p.id !== id);
-  if (filtered.length === products.length) return res.status(404).json({ error: "Producto no encontrado" });
 
+  const filtered = products.filter((p) => p.id !== parseInt(id));
   saveProducts(filtered);
-  res.json({ message: "🗑️ Producto eliminado" });
+
+  res.json({ message: "🗑️ Producto eliminado correctamente" });
 });
 
-// Start
-const PORT = process.env.PORT || 3000;
+// 📁 Servir imágenes subidas
+app.use("/uploads", express.static(path.resolve("uploads")));
+
+// --- Ruta base ---
+app.get("/", (req, res) => {
+  res.send("🚀 Smile Zone Backend funcionando correctamente con subida de imágenes");
+});
+
+// === INICIAR SERVIDOR ===
 app.listen(PORT, () => console.log(`✅ Servidor activo en puerto ${PORT}`));
