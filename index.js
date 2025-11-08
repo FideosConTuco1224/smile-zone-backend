@@ -117,3 +117,14 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
   console.log(`✅ Servidor activo en puerto ${PORT}`)
 );
+const multer = require("multer");
+const upload = multer({ dest: "uploads/" });
+
+// Nueva ruta para subir imágenes
+app.post("/upload", upload.single("image"), (req, res) => {
+  const imageUrl = `https://smile-zone-backend-1.onrender.com/uploads/${req.file.filename}`;
+  res.json({ url: imageUrl });
+});
+
+// Servir imágenes subidas
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
