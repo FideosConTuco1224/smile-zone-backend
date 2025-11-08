@@ -1,27 +1,14 @@
 {
   "name": "smile-zone-backend",
   "version": "1.0.0",
-  "description": "Backend de Smile Zone - API para gestionar productos",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.js"
   },
-  "keywords": [
-    "express",
-    "api",
-    "smile-zone",
-    "backend"
-  ],
-  "author": "Nahuel Gutierrez",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
-    "express": "^5.1.0"
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0"
   },
-  "devDependencies": {
-    "nodemon": "^3.1.7"
-  }
+  "type": "commonjs"
 }
