@@ -6,29 +6,14 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
-const multer = require("multer");
 
 const app = express();
 
-// --- Configuración básica ---
+// --- Middlewares ---
 app.use(cors({ origin: "*" }));
-app.use(express.json());
-app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // Servir imágenes
+app.use(express.json({ limit: "10mb" })); // Soporta imágenes en base64
 
-// --- Configuración de multer (para subir imágenes) ---
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(__dirname, "uploads");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  },
-});
-const upload = multer({ storage });
-
-// --- Archivo de productos ---
+// --- Archivo donde se guardan los productos ---
 const productsFile = path.join(__dirname, "products.json");
 
 // === FUNCIONES AUXILIARES ===
@@ -47,24 +32,13 @@ function saveProducts(products) {
 
 // === RUTAS ===
 
-// ✅ Verificación de servidor
-app.get("/", (req, res) => {
-  res.send("🚀 Smile Zone Backend funcionando correctamente");
-});
-
-// ✅ Obtener productos
+// ✅ Obtener todos los productos
 app.get("/products", (req, res) => {
   const products = loadProducts();
   res.json(products);
 });
 
-// ✅ Subir imagen (desde el admin)
-app.post("/upload", upload.single("image"), (req, res) => {
-  const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-  res.json({ url: imageUrl });
-});
-
-// ✅ Agregar producto
+// ✅ Agregar nuevo producto
 app.post("/add-product", (req, res) => {
   const { name, price, image, category, description } = req.body;
 
@@ -73,11 +47,12 @@ app.post("/add-product", (req, res) => {
   }
 
   const products = loadProducts();
+
   const newProduct = {
     id: Date.now(),
     name,
     price,
-    image,
+    image, // Puede ser URL o base64
     category,
     description,
   };
@@ -88,13 +63,20 @@ app.post("/add-product", (req, res) => {
   res.json({ message: "✅ Producto agregado correctamente", product: newProduct });
 });
 
-// ✅ Modificar producto existente
-app.put("/update-product", (req, res) => {
+// ✅ Actualizar producto existente
+app.post("/update-product", (req, res) => {
   const { id, name, price, image, category, description } = req.body;
-  let products = loadProducts();
 
+  if (!id) {
+    return res.status(400).json({ error: "Falta el ID del producto a actualizar" });
+  }
+
+  let products = loadProducts();
   const index = products.findIndex((p) => p.id === id);
-  if (index === -1) return res.status(404).json({ error: "Producto no encontrado" });
+
+  if (index === -1) {
+    return res.status(404).json({ error: "Producto no encontrado" });
+  }
 
   products[index] = { id, name, price, image, category, description };
   saveProducts(products);
@@ -105,12 +87,25 @@ app.put("/update-product", (req, res) => {
 // ✅ Eliminar producto
 app.post("/delete-product", (req, res) => {
   const { id } = req.body;
-  let products = loadProducts();
 
+  if (!id) {
+    return res.status(400).json({ error: "Falta el ID del producto a eliminar" });
+  }
+
+  const products = loadProducts();
   const filtered = products.filter((p) => p.id !== id);
-  saveProducts(filtered);
 
+  if (filtered.length === products.length) {
+    return res.status(404).json({ error: "Producto no encontrado" });
+  }
+
+  saveProducts(filtered);
   res.json({ message: "🗑️ Producto eliminado correctamente" });
+});
+
+// ✅ Ruta de prueba base
+app.get("/", (req, res) => {
+  res.send("🚀 Smile Zone Backend funcionando correctamente");
 });
 
 // === INICIAR SERVIDOR ===
